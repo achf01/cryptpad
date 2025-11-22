@@ -531,6 +531,7 @@ define([
         APP.FM = common.createFileManager(fmConfig);
 
         var resetData = function (blob, type) {
+            console.log("beep", blob, type)
             // If a read-only refresh popup was planned, abort it
             delete APP.refreshPopup;
             clearTimeout(APP.refreshRoTo);
@@ -551,6 +552,7 @@ define([
                 clearTimeout(pendingChanges[key]);
                 delete pendingChanges[key];
             });
+            console.log("beep !", APP.stopHistory, APP.template)
             if (APP.stopHistory || APP.template) { APP.history = false; }
             startOO(blob, type, true);
         };
@@ -576,9 +578,11 @@ define([
                 hash: (APP.history || APP.template) ? ooChannel.historyLastHash : ooChannel.lastHash,
                 index:  APP.revert ? ooChannel.currentIndex : ooChannel.cpIndex
             };
+            console.log("queue before", ooChannel.queue)
             if (APP.revert) {
                 APP.revert = false;
             }
+            ooChannel.queue = []
             fixSheets();
 
             if (!isLockedModal.modal) {
@@ -587,7 +591,7 @@ define([
             ooChannel.ready = false;
             data.callback = function () {
                 if (APP.template) { APP.template = false; }
-                resetData(blob, file);
+                resetData(blob, file)
             };
 
             APP.FM.handleFile(blob, data);
@@ -829,6 +833,8 @@ define([
 
                 loadLastDocument(cp)
                     .then(({blob, fileType}) => {
+                                            console.log("hello2")
+
                         ooChannel.queue = messages.slice(1, minor)
                         resetData(blob, fileType);
                         UI.removeLoadingScreen();
@@ -845,6 +851,8 @@ define([
                         var type = common.getMetadataMgr().getPrivateData().ooType;
                         if (APP.downloadType) { type = APP.downloadType; }
                         var blob = loadInitDocument(type, true);
+                                            console.log("hello3")
+
                         ooChannel.queue = messages.slice(0, version+1)
                         resetData(blob, file);
                         UI.removeLoadingScreen();
@@ -1063,6 +1071,7 @@ define([
         const getInitialChanges = function() {
             const changes = [];
             if (content.version > 2) {
+                console.log("queue after", ooChannel.queue)
                 ooChannel.queue.forEach(function (data) {
                     Array.prototype.push.apply(changes, data.msg.changes);
                 });
@@ -2183,13 +2192,15 @@ define([
 
         var firstOO = true;
         startOO = function (blob, file, force) {
+            console.trace("beep1", blob, file, force)
+
             if (APP.ooconfig && !force) { return void console.error('already started'); }
             const lock = !APP.history && (APP.migrate);
 
             let fromContent = metadataMgr.getPrivateData().fromContent;
             if (!firstOO) { fromContent = undefined; }
             firstOO = false;
-
+            console.trace("beep2", blob, file, force, fromContent, APP.history)
             // Starting from version 3, we can use the view mode again
             // defined but never used
             //var mode = (content && content.version > 2 && lock) ? "view" : "edit";
@@ -2878,18 +2889,27 @@ Uncaught TypeError: Cannot read property 'calculatedType' of null
         };
 
         const loadCp = async function (cp, keepQueue) {
+                                APP.history = true
+                                APP.stopHistory = false
+
             if (!isLockedModal.modal) {
                 isLockedModal.modal = UI.openCustomModal(isLockedModal.content);
             }
             try {
                 const {blob, fileType} = await loadLastDocument(cp);
+
                 if (!keepQueue) { ooChannel.queue = []; }
-                resetData(blob, fileType);
+                                                    console.log("hello4", ooChannel.queue)
+
+                resetData(blob, fileType, true);
             } catch (e) {
                 var file = getFileType();
-                var type = common.getMetadataMgr().gistoryetPrivateData().ooType;
+                var type = common.getMetadataMgr().getPrivateData().ooType;
                 var blob = loadInitDocument(type, true);
+
                 if (!keepQueue) { ooChannel.queue = []; }
+                                                    console.log("hello5", ooChannel.queue)
+
                 resetData(blob, file);
             }
         };
@@ -3118,6 +3138,9 @@ Uncaught TypeError: Cannot read property 'calculatedType' of null
                     loadCp(cp, true);
                 };
                 var onPatchBack = function (cp, msgs) {
+                    APP.history = true
+                                                    APP.stopHistory = false
+
                     if (msgs) {
                         var msgsFormatted = [];
                         msgs.forEach(function(msg) {
@@ -3138,6 +3161,7 @@ Uncaught TypeError: Cannot read property 'calculatedType' of null
                     } else {
                         loadCp(cp);
                     }
+
                 };
                 var docType = function() {
                     return APP.ooconfig.documentType;
@@ -3150,6 +3174,8 @@ Uncaught TypeError: Cannot read property 'calculatedType' of null
                     }
                     // Cancel button: redraw from lastCp
                     APP.history = false;
+                                        console.log("hello7")
+
                     ooChannel.queue = [];
                     ooChannel.ready = false;
                     // Fill the queue and then load the last CP
@@ -3862,6 +3888,7 @@ Uncaught TypeError: Cannot read property 'calculatedType' of null
                 var latest = getLastCp(true);
                 var newLatest = getLastCp();
                 if (newLatest.index > latest.index || (newLatest.index && !latest.index)) {
+                    console.log("hello1")
                     ooChannel.queue = [];
                     ooChannel.ready = false;
                     var reload = function () {
