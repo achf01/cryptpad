@@ -172,6 +172,7 @@ define([
         var onClose = function () { config.setHistory(false); };
         var onRevert = function () {
             config.onRevert(true);
+            console.log("hashes", hashes)
         };
 
         config.setHistory(true);
@@ -215,32 +216,48 @@ define([
             }, 200);
         }
 
+        var lastPatchIndex;
+
+
         var next = async function () {
+            lastPatchIndex = 0;
+
             forward = true;
             msgIndex++;
             msgs = ooMessages[id];
 
             if (Object.keys(hashes).length) {
                 if (msgIndex === 0) {
+                                        // console.log("next", ooMessages, id, msgs, msgIndex)
+
                     id++;
                     await loadMoreOOHistory();
                     msgs = ooMessages[id];
 
                     if (!msgs.length) {
+                                                                // console.log("next2", ooMessages, id, msgs, msgIndex)
+
                         id++;
                         config.loadHistoryCp(hashes[id]);
                         await loadMoreOOHistory();
                         msgIndex = -ooMessages[id].length - 1;
                     } else {
+                                                                // console.log("next3", ooMessages, id, msgs, msgIndex)
+
                         msgIndex = -msgs.length;
                         patch = msgs[msgs.length + msgIndex];
                         config.onPatchBack(hashes[id], [patch]);
                     }
                 } else {
+                                                            // console.log("nex4", ooMessages, id, msgs, msgIndex)
+
                     if (!msgs.length) { return config.onPatchBack(hashes[id + 1]); }
                     if (Math.abs(msgIndex) > msgs.length) { msgIndex = -msgs.length; }
                 }
-            } else if (msgs.length + msgIndex === -1) { msgIndex++; }
+            } else if (msgs.length + msgIndex === -1) { msgIndex++; 
+                                                        // console.log("next5", ooMessages, id, msgs, msgIndex)
+
+            }
 
             patch = msgs[msgs.length + msgIndex];
             position = msgs.indexOf(patch) + 1;
@@ -255,25 +272,42 @@ define([
         var prev = function () {
             forward = false;
             msgs = ooMessages[id];
+            var firstPatch;
             let hasHashes = Object.keys(hashes).length;
             let cp = hasHashes ? hashes[id] : {};
             let loadPrevCp = (!msgs.length) ||
                     (msgs.length + 1 === Math.abs(msgIndex) && id !== 0) ||
                     (msgs.length - Math.abs(msgIndex) === -2);
+                    console.log("prev", ooMessages, id, msgs, msgIndex)
             
             var goBack = function () {
-                var q = msgs.slice(0, msgIndex);
+                patch = msgs[msgs.length + msgIndex];
+                                    console.log("prev3", ooMessages, id, msgs, msgIndex)
+
+
+                if ((lastPatchIndex && lastPatchIndex < JSON.parse(patch.msg).changesIndex)) {
+                    console.log("prev patch", lastPatchIndex, JSON.parse(patch.msg).changesIndex)
+                    var q = msgs;
+                    msgIndex++;
+                } else {
+                    var q = msgs.slice(0, msgIndex);
+                }
+                
                 config.onPatchBack(cp, q);
-                position = q.length;
-                patch = q[position - 1];
+                patch = msgs[msgs.length + msgIndex]
+                position = msgs.indexOf(patch)
                 showVersion(false, position);
                 msgIndex--; 
+                lastPatchIndex = patch ? JSON.parse(patch.msg).changesIndex : undefined;
                 loadingFalse();
             }
 
             if (hasHashes && loadPrevCp) {
+                                    console.log("prev2", ooMessages, id, msgs, msgIndex)
+
+                firstPatch = msgs[0]
                 id--; 
-                msgIndex = -1;
+                msgIndex = -1
                 return loadMoreOOHistory().then(() => {
                     msgs = ooMessages[id];
                     cp = hashes[id];
