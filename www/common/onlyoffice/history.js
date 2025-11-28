@@ -68,13 +68,9 @@ define([
             if (!Object.keys(ooMessages).length) {
                 return version + '.0';
             }
-            
-            if (typeof(position) === "undefined") {
+            if (typeof(position) === "undefined" || position === -1) {
                 position = ooMessages[id]?.length || 0;
-            } else if (position === ooMessages[id]?.length && hashes[version + 1]) {
-                position = 0;
-                if (ooMessages[id]?.length) { version++; }
-            }
+            } 
             return version + '.' + position;
         };
 
@@ -82,7 +78,6 @@ define([
             currentVersion = getVersion(position, initial);
             if (initial) { currentVersion = Messages.oo_version_latest; }
             $version.text(Messages.oo_version + currentVersion);
-
             var $pos = $hist.find('.cp-history-timeline-pos');
             if (!ooMessages[id]) { return; }
             var msgs = ooMessages[id];
@@ -191,20 +186,19 @@ define([
             $hist.find('.cp-toolbar-history-next, .cp-toolbar-history-previous')
                 .prop('disabled', '');
 
-            if ((id === -1 || id === 0) && Math.abs(msgIndex) === ooMessages[id]?.length+2) {
-                $fastPrev.prop('disabled', 'disabled');
-            }
-            if ((id === -1 || id === 0) && ooMessages[id]?.length+2=== Math.abs(msgIndex)) {
+            if ((id === -1 || id === 0) && (ooMessages[id]?.length+1 === Math.abs(msgIndex) || ooMessages[id]?.length+2 === Math.abs(msgIndex))) {
                 $prev.prop('disabled', 'disabled');
+                $fastPrev.prop('disabled', 'disabled');
             }
             var version = currentVersion.split('.');
             var hashesLength = Object.keys(hashes).length;
             var lastestHash = hashes[Object.keys(hashes).pop()]?.hash;
               
-            if (hashesLength === parseInt(version[0]) && ooMessages[id].length === parseInt(version[1]) ||
-              hashesLength === parseInt(version[0]) && parseInt(version[1]) === 0 && lastestHash === config.onlyoffice.lastHash) {
-                // $next.prop('disabled', 'disabled');
-                // $fastNext.prop('disabled', 'disabled');
+            if (hashesLength === parseInt(version[0]) && ooMessages[id].length === parseInt(version[1]) || 
+            hashesLength+1 === id && (msgIndex === -1) && forward  ||
+            hashesLength === parseInt(version[0]) && parseInt(version[1]) === 0 && lastestHash === config.onlyoffice.lastHash ) {
+                $next.prop('disabled', 'disabled');
+                $fastNext.prop('disabled', 'disabled');
             }
         };
 
@@ -225,47 +219,69 @@ define([
             msgIndex++;
             msgs = ooMessages[id];
 
-            if (Object.keys(hashes).length) {
-                if (msgIndex === 0) {
+            if (!Object.keys(hashes).length) {
+                if (msgs.length + msgIndex === -1) msgIndex++;
+                return finalizeStep();
+            }
+
+            if (msgIndex === 0) {
+                id++;
+                await loadMoreOOHistory();
+                msgs = ooMessages[id];
+                console.log("next", ooMessages, id, msgs, msgIndex)
+                if (!msgs.length) {
+                    config.loadHistoryCp(hashes[id]);
                     id++;
+                    config.loadHistoryCp(hashes[id]);
                     await loadMoreOOHistory();
-                    msgs = ooMessages[id];
+                    msgIndex = -ooMessages[id].length - 1;
+                    position = 0;
+                    showVersion(false, position);
+                console.log("next2", ooMessages, id, msgs, msgIndex)
 
-                    if (!msgs.length) {
-                        if (msgIndex === 0) {
-                            config.loadHistoryCp(hashes[id]);
-                            id++;
-                        } else {
-                            id++;
-                        }
-                        config.loadHistoryCp(hashes[id]);
-                        await loadMoreOOHistory();
-                        msgIndex = -ooMessages[id].length - 1;
-                        return;
-                    } else {
-                        msgIndex = -msgs.length;
-                        patch = msgs[msgs.length + msgIndex];
-                        if (JSON.parse(patch.msg).changesIndex < prevPatchIndex) {
-                            config.loadHistoryCp(hashes[id]);
-                            msgIndex--;
-                            return;
-                        }
-                        config.onPatchBack(hashes[id], [patch]);
-                        prevPatchIndex = JSON.parse(patch.msg).changesIndex;
-                    }
-                } else {
-                    if (!msgs.length) { return config.onPatchBack(hashes[id + 1]); }
-                    if (Math.abs(msgIndex) > msgs.length) { msgIndex = -msgs.length; }
+                    return;
                 }
-            } else if (msgs.length + msgIndex === -1) { msgIndex++; }
 
+                msgIndex = -msgs.length;
+                patch = msgs[msgs.length + msgIndex];
+                
+                if (JSON.parse(patch.msg).changesIndex < prevPatchIndex) {
+                    config.loadHistoryCp(hashes[id]);
+                    msgIndex--;
+                    position = 0
+                    showVersion(false, position);
+                                    console.log("next3", ooMessages, id, msgs, msgIndex)
+
+                    return;
+                }
+                                console.log("next4", ooMessages, id, msgs, msgIndex)
+
+                config.onPatchBack(hashes[id], [patch]);
+                prevPatchIndex = JSON.parse(patch.msg).changesIndex;
+            } else {
+                if (!msgs.length) {
+                    position = 0
+                    showVersion(false, position);
+                                    console.log("next5", ooMessages, id, msgs, msgIndex)
+
+                    return config.onPatchBack(hashes[id + 1])
+                    
+                }
+                if (Math.abs(msgIndex) > msgs.length) msgIndex = -msgs.length;
+            }
+                            console.log("next6", ooMessages, id, msgs, msgIndex)
+
+            finalizeStep();
+        };
+
+        function finalizeStep() {
             patch = msgs[msgs.length + msgIndex];
             position = msgs.indexOf(patch) + 1;
             config.onPatch?.(patch);
             showVersion(false, position);
             loadingFalse();
-            prevPatchIndex = JSON.parse(patch.msg).changesIndex
-        };
+            prevPatchIndex = JSON.parse(patch.msg).changesIndex;
+        }
 
 
         var msgs;
@@ -281,17 +297,28 @@ define([
             let loadPrevCp = (!msgs.length) ||
                     (msgs.length + 1 === Math.abs(msgIndex) && id !== 0) ||
                     (msgs.length - Math.abs(msgIndex) === -2);
-            
+                            console.log("prev", ooMessages, id, msgs, msgIndex)
+
             var goBack = function () {
+
                 patch = msgs[msgs.length + msgIndex];
+                //1: 8, 14
+                                                console.log("prev2.5", patch, lastPatchIndex, JSON.parse(patch.msg).changesIndex)
+
                 if ((lastPatchIndex && patch && lastPatchIndex < JSON.parse(patch.msg).changesIndex) 
+                    
                     || emptyCp ) {
+                                        console.log("prev3", ooMessages, id, msgs, msgIndex)
+
                     var q = msgs;
                     msgIndex++;
                 } else {
+                                    console.log("prev4", ooMessages, id, msgs, msgIndex)
+
                     var q = msgs.slice(0, msgIndex);
                 }
-                
+                                console.log("prev5", ooMessages, id, msgs, msgIndex)
+
                 config.onPatchBack(cp, q);   
                 patch = msgs[msgs.length + msgIndex]
                 msgIndex--; 
@@ -302,6 +329,7 @@ define([
             }
 
             if (hasHashes && loadPrevCp) {
+                console.log("prev2", ooMessages, id, msgs, msgIndex)
                 emptyCp = msgs.length ? false : true;
                 firstPatch = msgs[0];
                 id--; 
@@ -435,7 +463,8 @@ define([
                         config.loadHistoryCp(cp);
                         msgs = ooMessages[id];
                         msgIndex = -msgs.length-1
-                        showVersion(false, 0)
+                        position = 0;
+                        showVersion(false, position)
                         loading = false;
                         return;
                     });
@@ -453,12 +482,13 @@ define([
             
             // Go to previous checkpoint
             $fastPrev.click(function () {
-                if (loading) { return; }
-                loading = true;
+                // if (loading) { return; }
+                // loading = true;
                 if (!ooMessages[id].length || ooMessages[id].length+2 === Math.abs(msgIndex)) {
                     id--;
                 } 
                 var cp = hashes[id];
+                lastPatchIndex = ooMessages[id] ? JSON.parse(ooMessages[id][0].msg).changesIndex : undefined
                 config.loadHistoryCp(cp);
                 loadMoreOOHistory().then(() => {
                     var msgs = ooMessages[id];

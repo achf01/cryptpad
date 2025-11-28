@@ -3102,7 +3102,7 @@ Uncaught TypeError: Cannot read property 'calculatedType' of null
             if (!privateData.ooVersionHash) {
             (function () {
                 /* add a history button */
-                var commit = function (revert) {
+                var commit = function () {
                     // Wait for the checkpoint to be uploaded before leaving history mode
                     // (race condition). We use "stopHistory" to remove the history
                     // flag only when the checkpoint is ready.
