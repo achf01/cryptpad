@@ -36,9 +36,7 @@ define([
         var hashes = config.onlyoffice.hashes;
         var id;
 
-        var sortedCp = Object.keys(hashes).map(Number).sort(function (a, b) {
-            return hashes[a].index - hashes[b].index;
-        });
+        var sortedCp = Object.keys(hashes).map(Number);
 
         var getId = function () {
             var cps = sortedCp.length;
@@ -132,7 +130,7 @@ define([
         }
 
         // We want to load a checkpoint (or initial state)
-        var loadMoreOOHistory = function (cb) {
+        var loadMoreOOHistory = function () {
             return new Promise((resolve, reject) => {
                 if (!Array.isArray(sortedCp)) { 
                     console.error("Wrong type");
@@ -140,6 +138,7 @@ define([
                 }
 
                 id = typeof(id) !== "undefined" ? id : getId();
+                console.log("history", id)
 
                 if (ooMessages[id-1] && !ooMessages[id-1].length) {
                     var cp = hashes[id-1];
@@ -151,7 +150,7 @@ define([
                 var toHash = nextId ? nextId.hash : config.onlyoffice.lastHash;
                 var fromHash = cp?.hash || 'NONE';
 
-                getMessages(toHash, fromHash, function (err, messages) {
+                getMessages(toHash, fromHash, function (err) {
                     if (err) {
                         console.error(err);
                         reject(err);
@@ -209,78 +208,38 @@ define([
             }, 200);
         }
 
-        var lastPatchIndex;
-        var prevPatchIndex
-
         var next = async function () {
-            lastPatchIndex = 0;
-            prevPatchIndex;
             forward = true;
             msgIndex++;
             msgs = ooMessages[id];
 
-            if (!Object.keys(hashes).length) {
-                if (msgs.length + msgIndex === -1) msgIndex++;
-                return finalizeStep();
-            }
-
-            if (msgIndex === 0) {
-                id++;
-                await loadMoreOOHistory();
-                msgs = ooMessages[id];
-                console.log("next", ooMessages, id, msgs, msgIndex)
-                if (!msgs.length) {
-                    config.loadHistoryCp(hashes[id]);
+            if (Object.keys(hashes).length) {
+                if (msgIndex === 0) {
                     id++;
-                    config.loadHistoryCp(hashes[id]);
                     await loadMoreOOHistory();
-                    msgIndex = -ooMessages[id].length - 1;
-                    position = 0;
-                    showVersion(false, position);
-                console.log("next2", ooMessages, id, msgs, msgIndex)
+                    msgs = ooMessages[id];
 
-                    return;
-                }
-
-                msgIndex = -msgs.length;
-                patch = msgs[msgs.length + msgIndex];
-                
-                if (JSON.parse(patch.msg).changesIndex < prevPatchIndex) {
-                    config.loadHistoryCp(hashes[id]);
-                    msgIndex--;
-                    position = 0
-                    showVersion(false, position);
-                                    console.log("next3", ooMessages, id, msgs, msgIndex)
-
-                    return;
-                }
-                                console.log("next4", ooMessages, id, msgs, msgIndex)
-
-                config.onPatchBack(hashes[id], [patch]);
-                prevPatchIndex = JSON.parse(patch.msg).changesIndex;
-            } else {
-                if (!msgs.length) {
-                    position = 0
-                    showVersion(false, position);
-                                    console.log("next5", ooMessages, id, msgs, msgIndex)
-
-                    return config.onPatchBack(hashes[id + 1])
+                    if (!msgs.length) {
+                        id++;
+                        config.loadHistoryCp(hashes[id]);
+                        await loadMoreOOHistory();
+                        msgIndex = -ooMessages[id].length - 1;
+                    } else {
+                        config.onPatchBack(hashes[id]);
+                        msgIndex = -ooMessages[id].length-1
+                        return;
+                    }
+                } else {
                     
+                    if (!msgs.length) { return config.onPatchBack(hashes[id + 1]); }
+                    if (Math.abs(msgIndex) > msgs.length) { msgIndex = -msgs.length; }
                 }
-                if (Math.abs(msgIndex) > msgs.length) msgIndex = -msgs.length;
-            }
-                            console.log("next6", ooMessages, id, msgs, msgIndex)
-
-            finalizeStep();
-        };
-
-        function finalizeStep() {
+            } else if (msgs.length + msgIndex === -1) { msgIndex++; }
             patch = msgs[msgs.length + msgIndex];
             position = msgs.indexOf(patch) + 1;
             config.onPatch?.(patch);
             showVersion(false, position);
             loadingFalse();
-            prevPatchIndex = JSON.parse(patch.msg).changesIndex;
         }
 
 
@@ -290,54 +249,35 @@ define([
             forward = false;
             msgs = ooMessages[id];
             prevPatchIndex = 0
-            var firstPatch;
             var emptyCp;
             let hasHashes = Object.keys(hashes).length;
             let cp = hasHashes ? hashes[id] : {};
             let loadPrevCp = (!msgs.length) ||
                     (msgs.length + 1 === Math.abs(msgIndex) && id !== 0) ||
                     (msgs.length - Math.abs(msgIndex) === -2);
-                            console.log("prev", ooMessages, id, msgs, msgIndex)
 
             var goBack = function () {
 
                 patch = msgs[msgs.length + msgIndex];
-                //1: 8, 14
-                                                console.log("prev2.5", patch, lastPatchIndex, JSON.parse(patch.msg).changesIndex)
-
-                if ((lastPatchIndex && patch && lastPatchIndex < JSON.parse(patch.msg).changesIndex) 
-                    
-                    || emptyCp ) {
-                                        console.log("prev3", ooMessages, id, msgs, msgIndex)
-
-                    var q = msgs;
-                    msgIndex++;
-                } else {
-                                    console.log("prev4", ooMessages, id, msgs, msgIndex)
-
-                    var q = msgs.slice(0, msgIndex);
-                }
-                                console.log("prev5", ooMessages, id, msgs, msgIndex)
-
+                var q = msgs.slice(0, msgIndex);
                 config.onPatchBack(cp, q);   
                 patch = msgs[msgs.length + msgIndex]
                 msgIndex--; 
                 position = msgs.indexOf(patch)
                 showVersion(false, position);
+                lastPatchTime = patch ? patch.time : undefined
                 lastPatchIndex = patch ? JSON.parse(patch.msg).changesIndex : undefined;
                 loadingFalse();
             }
 
             if (hasHashes && loadPrevCp) {
-                console.log("prev2", ooMessages, id, msgs, msgIndex)
                 emptyCp = msgs.length ? false : true;
-                firstPatch = msgs[0];
                 id--; 
                 msgIndex = -1
                 return loadMoreOOHistory().then(() => {
                     msgs = ooMessages[id];
                     cp = hashes[id];
-                    goBack();                    
+                    config.onPatchBack(cp, msgs);                   
                 });
             }
             goBack();
