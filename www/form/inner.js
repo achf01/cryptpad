@@ -1697,7 +1697,8 @@ define([
                 var tag = h('input', {
                     type: opts.type,
                     step: "any",
-                    placeholder: Messages['form_input_ph_'+opts.type] || ''
+                    placeholder: Messages['form_input_ph_'+opts.type] || '',
+                    required: opts.required ? true : undefined
                 });
                 var $tag = $(tag);
                 $tag.on('change keypress keydown', Util.throttle(function () {
@@ -1763,7 +1764,7 @@ define([
             },
             get: function (opts, a, n, evOnChange) {
                 if (!opts || typeof(opts.maxLength) === "undefined") { opts = Util.clone(TYPES.textarea.defaultOpts); }
-                var text = h('textarea', {maxlength: opts.maxLength});
+                var text = h('textarea', {maxlength: opts.maxLength, required: opts.required ? true : undefined});
                 var $text = $(text);
                 var charCount = h('div.cp-form-type-textarea-charcount');
                 var updateChar = function () {
@@ -2102,9 +2103,12 @@ define([
                 type: 'date',
             },
             get: function (opts, a, n, evOnChange) {
+                var isRequired = opts && opts.required;
                 opts = Util.clone(TYPES.date.defaultOpts);
 
-                var tag = h('input');
+                var tag = h('input', {
+                    required: isRequired ? true : undefined
+                });
 
                 var picker = Flatpickr(tag, {
                     disableMobile: true,
